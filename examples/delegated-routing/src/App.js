@@ -3,12 +3,12 @@
 
 import React from 'react'
 import Ipfs from 'ipfs'
-import libp2pBundle from './libp2p-bundle'
-const Component = React.Component
+import libp2pConfig from './libp2p-configuration'
+import PeerId from 'peer-id'
 
-const BootstrapNode = '/ip4/127.0.0.1/tcp/8081/ws/p2p/QmdoG8DpzYUZMVP5dGmgmigZwR1RE8Cf6SxMPg1SBXJAQ8'
+const BootstrapNode = '/ip4/127.0.0.1/tcp/4010/ws/p2p/QmZrsjJ7v9QoJNjDJmjsQ8947wiK3UnaPPLQvrTSRDAZ2d'
 
-class App extends Component {
+class App extends React.Component {
   constructor (props) {
     super(props)
     this.state = {
@@ -16,7 +16,7 @@ class App extends Component {
       // This hash is the IPFS readme
       hash: 'QmPZ9gcCEpqKTo6aq61g2nXGUhM4iCL3ewB6LDXZCtioEB',
       // This peer is one of the Bootstrap nodes for IPFS
-      peer: 'QmV6kA2fB8kTr6jc3pL5zbNsjKbmPUHAPKKHRBYe1kDEyc',
+      peer: 'QmSoLnSGccFuZQJzRadHn95W2CrSFmZuTdDWP8HXaHca9z',
       isLoading: 0
     }
     this.peerInterval = null
@@ -38,39 +38,39 @@ class App extends Component {
     })
   }
 
-  handleHashSubmit (event) {
+  async handleHashSubmit (event) {
     event.preventDefault()
     this.setState({
       isLoading: this.state.isLoading + 1
     })
 
-    this.ipfs.cat(this.state.hash, (err, data) => {
-      if (err) console.log('Error', err)
+    const chunks = []
+    for await (const chunk of this.ipfs.cat(this.state.hash)) {
+      chunks.push(chunk)
+    }
 
-      this.setState({
-        response: data.toString(),
-        isLoading: this.state.isLoading - 1
-      })
+    this.setState({
+      response: Buffer.concat(chunks).toString(),
+      isLoading: this.state.isLoading - 1
     })
   }
-  handlePeerSubmit (event) {
+  async handlePeerSubmit (event) {
     event.preventDefault()
     this.setState({
       isLoading: this.state.isLoading + 1
     })
 
-    this.ipfs.dht.findpeer(this.state.peer, (err, results) => {
-      if (err) console.log('Error', err)
+    const peerId = PeerId.createFromB58String(this.state.peer)
+    const results = await this.ipfs.libp2p.peerRouting.findPeer(peerId)
 
-      this.setState({
-        response: JSON.stringify(results, null, 2),
-        isLoading: this.state.isLoading - 1
-      })
+    this.setState({
+      response: JSON.stringify(results, null, 2),
+      isLoading: this.state.isLoading - 1
     })
   }
 
-  componentDidMount () {
-    window.ipfs = this.ipfs = new Ipfs({
+  async componentDidMount () {
+    window.ipfs = this.ipfs = await Ipfs.create({
       config: {
         Addresses: {
           Swarm: []
@@ -90,27 +90,17 @@ class App extends Component {
       preload: {
         enabled: false
       },
-      libp2p: libp2pBundle
+      libp2p: libp2pConfig
     })
-    this.ipfs.on('ready', () => {
-      if (this.peerInterval) {
-        clearInterval(this.peerInterval)
-      }
 
-      this.ipfs.swarm.connect(BootstrapNode, (err) => {
-        if (err) {
-          console.log('Error connecting to the node', err)
-        }
-        console.log('Connected!')
-      })
+    await this.ipfs.swarm.connect(BootstrapNode)
+    console.log('Connected!')
 
-      this.peerInterval = setInterval(() => {
-        this.ipfs.swarm.peers((err, peers) => {
-          if (err) console.log(err)
-          if (peers) this.setState({peers: peers.length})
-        })
-      }, 2500)
-    })
+    this.peerInterval = setInterval(async () => {
+      const peers = await this.ipfs.swarm.peers()
+
+      if (peers) this.setState({ peers: peers.length })
+    }, 2500)
   }
 
   render () {

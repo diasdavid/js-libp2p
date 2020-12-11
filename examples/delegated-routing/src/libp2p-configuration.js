@@ -3,7 +3,6 @@
 
 const Libp2p = require('libp2p')
 const Websockets = require('libp2p-websockets')
-const WebSocketStar = require('libp2p-websocket-star')
 const WebRTCStar = require('libp2p-webrtc-star')
 const MPLEX = require('libp2p-mplex')
 const SECIO = require('libp2p-secio')
@@ -11,18 +10,15 @@ const KadDHT = require('libp2p-kad-dht')
 const DelegatedPeerRouter = require('libp2p-delegated-peer-routing')
 const DelegatedContentRouter = require('libp2p-delegated-content-routing')
 
-export default function Libp2pBundle ({peerInfo, peerBook}) {
-  const wrtcstar = new WebRTCStar({id: peerInfo.id})
-  const wsstar = new WebSocketStar({id: peerInfo.id})
+export default function Libp2pConfiguration ({peerId}) {
   const delegatedApiOptions = {
-    host: '0.0.0.0',
-    protocol: 'http',
-    port: '8080'
+    protocol: 'https',
+    port: 443,
+    host: 'node0.delegate.ipfs.io'
   }
 
   return new Libp2p({
-    peerInfo,
-    peerBook,
+    peerId,
     // Lets limit the connection managers peers and have it check peer health less frequently
     connectionManager: {
       maxPeers: 10,
@@ -30,18 +26,13 @@ export default function Libp2pBundle ({peerInfo, peerBook}) {
     },
     modules: {
       contentRouting: [
-        new DelegatedContentRouter(peerInfo.id, delegatedApiOptions)
+        new DelegatedContentRouter(peerId, delegatedApiOptions)
       ],
       peerRouting: [
         new DelegatedPeerRouter(delegatedApiOptions)
       ],
-      peerDiscovery: [
-        wrtcstar.discovery,
-        wsstar.discovery
-      ],
       transport: [
-        wrtcstar,
-        wsstar,
+        WebRTCStar,
         Websockets
       ],
       streamMuxer: [
